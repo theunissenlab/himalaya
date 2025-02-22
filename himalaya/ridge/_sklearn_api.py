@@ -239,6 +239,10 @@ class RidgeCV(Ridge):
     Y_in_cpu : bool
         If True, keep the target values ``y`` in CPU memory (slower).
 
+    memory_efficient_matmul : bool
+        If True, use a memory-efficient matrix multiplication (slower).
+        This is good if you have large number of samples or small number of targets.
+
     force_cpu : bool
         If True, computations will be performed on CPU, ignoring the
         current backend. If False, use the current backend.
@@ -274,13 +278,15 @@ class RidgeCV(Ridge):
     ALL_SOLVERS = dict(svd=solve_ridge_cv_svd)
 
     def __init__(self, alphas=[0.1, 1], fit_intercept=False, solver="svd",
-                 solver_params=None, cv=5, Y_in_cpu=False, force_cpu=False):
+                 solver_params=None, cv=5, Y_in_cpu=False, 
+                 memory_efficient_matmul=False, force_cpu=False):
         self.alphas = alphas
         self.fit_intercept = fit_intercept
         self.solver = solver
         self.solver_params = solver_params
         self.cv = cv
         self.Y_in_cpu = Y_in_cpu
+        self.memory_efficient_matmul = memory_efficient_matmul
         self.force_cpu = force_cpu
 
     @force_cpu_backend
@@ -320,7 +326,8 @@ class RidgeCV(Ridge):
         # ------------------ call the solver
         tmp = self._call_solver(X=X, Y=y, cv=cv, alphas=alphas,
                                 fit_intercept=self.fit_intercept,
-                                Y_in_cpu=self.Y_in_cpu)
+                                Y_in_cpu=self.Y_in_cpu,
+                                memory_efficient_matmul=self.memory_efficient_matmul)
         if self.fit_intercept:
             self.best_alphas_, self.coef_, self.cv_scores_ = tmp[:3]
             self.intercept_, = tmp[3:]
@@ -386,6 +393,10 @@ class GroupRidgeCV(_BaseRidge):
     Y_in_cpu : bool
         If True, keep the target values ``y`` in CPU memory (slower).
 
+    memory_efficient_matmul : bool
+        If True, use a memory-efficient matrix multiplication (slower).
+        This is good if you have large number of samples or small number of targets.
+
     force_cpu : bool
         If True, computations will be performed on CPU, ignoring the
         current backend. If False, use the current backend.
@@ -446,7 +457,7 @@ class GroupRidgeCV(_BaseRidge):
 
     def __init__(self, groups=None, solver="random_search", solver_params=None,
                  fit_intercept=False, cv=5, random_state=None, Y_in_cpu=False,
-                 force_cpu=False):
+                 memory_efficient_matmul=False, force_cpu=False):
 
         self.groups = groups
         self.solver = solver
@@ -455,6 +466,7 @@ class GroupRidgeCV(_BaseRidge):
         self.cv = cv
         self.random_state = random_state
         self.Y_in_cpu = Y_in_cpu
+        self.memory_efficient_matmul = memory_efficient_matmul
         self.force_cpu = force_cpu
 
     @force_cpu_backend
@@ -501,7 +513,8 @@ class GroupRidgeCV(_BaseRidge):
         tmp = self._call_solver(Xs=Xs, Y=y, cv=cv, return_weights=True,
                                 random_state=self.random_state,
                                 fit_intercept=self.fit_intercept,
-                                Y_in_cpu=self.Y_in_cpu)
+                                Y_in_cpu=self.Y_in_cpu,
+                                memory_efficient_matmul=self.memory_efficient_matmul)
         if self.fit_intercept:
             self.deltas_, self.coef_, self.cv_scores_ = tmp[:3]
             self.intercept_, = tmp[3:]

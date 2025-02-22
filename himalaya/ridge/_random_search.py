@@ -19,7 +19,8 @@ def solve_group_ridge_random_search(
     score_func=l2_neg_loss, cv=5, return_weights=False, local_alpha=True,
     jitter_alphas=False, random_state=None, n_targets_batch=None,
     n_targets_batch_refit=None, n_alphas_batch=None, progress_bar=True,
-    conservative=False, Y_in_cpu=False, diagonalize_method="svd", warn=True):
+    conservative=False, Y_in_cpu=False, memory_efficient_matmul=False,
+    diagonalize_method="svd", warn=True):
     """Solve group ridge regression using random search on the simplex.
 
     Solve the group-regularized ridge regression::
@@ -81,6 +82,9 @@ def solve_group_ridge_random_search(
         If False, take the best.
     Y_in_cpu : bool
         If True, keep the target values ``Y`` in CPU memory (slower).
+    memory_efficient_matmul : bool
+        If True, use a memory-efficient matrix multiplication (slower).
+        This is good if you have large number of samples or small number of targets.
     diagonalize_method : str in {"svd"}
         Method used to diagonalize the features.
     warn : bool
@@ -216,11 +220,16 @@ def solve_group_ridge_random_search(
             for matrix, alpha_batch in _decompose_ridge(
                     Xtrain=Xtrain, alphas=alphas, negative_eigenvalues="nan",
                     n_alphas_batch=n_alphas_batch, method=diagonalize_method):
-                # n_alphas_batch, n_features, n_samples_train = \
-                # matrix.shape
-                matrix = backend.matmul(Xtest, matrix)
-                # n_alphas_batch, n_samples_test, n_samples_train = \
-                # matrix.shape
+                if memory_efficient_matmul:
+                    tmp_matrix = backend.matmul(matrix, Ytrain)
+                    # n_alphas_batch, n_features, n_targets_batch = \
+                    # tmp_matrix.shape
+                else:
+                    # n_alphas_batch, n_features, n_samples_train = \
+                    # matrix.shape
+                    matrix = backend.matmul(Xtest, matrix)
+                    # n_alphas_batch, n_samples_test, n_samples_train = \
+                    # matrix.shape
 
                 predictions = None
                 for start in range(0, n_targets, n_targets_batch):
@@ -232,15 +241,23 @@ def solve_group_ridge_random_search(
                         Ytrain = Ytrain - Ytrain_mean
                         Ytest = Ytest - Ytrain_mean
 
-                    predictions = backend.matmul(matrix, Ytrain)
-                    # n_alphas_batch, n_samples_test, n_targets_batch = \
-                    # predictions.shape
+                    if memory_efficient_matmul:
+                        predictions = backend.matmul(Xtest, tmp_matrix)
+                        # n_alphas_batch, n_samples_test, n_targets_batch = \
+                        # predictions.shape
+
+                    else:
+                        predictions = backend.matmul(matrix, Ytrain)
+                        # n_alphas_batch, n_samples_test, n_targets_batch = \
+                        # predictions.shape
 
                     with warnings.catch_warnings():
                         warnings.filterwarnings("ignore", category=UserWarning)
                         scores[jj, alpha_batch,
                                batch] = score_func(Ytest, predictions)
                         # n_alphas_batch, n_targets_batch = score.shape
+                    if memory_efficient_matmul:
+                        del tmp_matrix
                     del Ytrain, Ytest
 
                 # make small alphas impossible to select
